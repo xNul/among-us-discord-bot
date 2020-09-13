@@ -256,16 +256,16 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
     let dead_players = &mut game_instance.dead_players;
     
     match dead_players.get(&user_id) {
-        Some(_) => { println!("{} has already been killed", user_id); },
+        Some(_) => { msg.reply(ctx, format!("{} has already been killed.", unparsed_user_id)).await?; },
         None => {
             dead_players.insert(user_id, true);
             let guild = msg.guild(&ctx.cache).await.unwrap();
             let member = guild.member(&ctx.http, user_id).await.unwrap();
             member.edit(&ctx.http, |em| em.mute(true)).await.unwrap();
+
+            msg.reply(ctx, format!("{} has been killed.", unparsed_user_id)).await?;
         },
     }
-
-    msg.reply(ctx, format!("{} has been killed.", unparsed_user_id)).await?;
 
     Ok(())
 }
@@ -285,17 +285,19 @@ async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
     let dead_players = &mut game_instance.dead_players;
     
     match dead_players.get(&user_id) {
-        Some(_) => { dead_players.remove(&user_id); },
-        None => { println!("{} is already alive", user_id); },
+        Some(_) => { 
+            dead_players.remove(&user_id);
+            if game_instance.global_unmute {
+                let guild = msg.guild(&ctx.cache).await.unwrap();
+                let member = guild.member(&ctx.http, user_id).await.unwrap();
+                member.edit(&ctx.http, |em| em.mute(false)).await.unwrap();
+            }
+            msg.reply(ctx, format!("{} has been revived.", unparsed_user_id)).await?;
+        },
+        None => {
+            msg.reply(ctx, format!("{} is already alive.", unparsed_user_id)).await?;
+        },
     }
-
-    if game_instance.global_unmute {
-        let guild = msg.guild(&ctx.cache).await.unwrap();
-        let member = guild.member(&ctx.http, user_id).await.unwrap();
-        member.edit(&ctx.http, |em| em.mute(false)).await.unwrap();
-    }
-
-    msg.reply(ctx, format!("{} has been revived.", unparsed_user_id)).await?;
 
     Ok(())
 }
