@@ -1,10 +1,13 @@
 use std::collections::HashMap;
+
 use serenity::async_trait;
 use serenity::client::{Client, Context, EventHandler};
-use serenity::model::channel::Message;
-use serenity::model::gateway::{Activity, Ready};
-use serenity::model::voice::VoiceState;
-use serenity::model::id::GuildId;
+use serenity::model::{
+    channel::Message,
+    gateway::{Activity, Ready},
+    voice::VoiceState,
+    id::GuildId
+};
 use serenity::framework::standard::{
     StandardFramework,
     CommandResult,
@@ -104,6 +107,9 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
     let voice_states = guild.voice_states;
     let user_id = msg.author.id.0;
     
+    // If user is in a VC and not init, then init and make leader.
+    // If user is in a VC and init and leader, run command.
+    // If user is in a VC and init and not leader, make leader.
     match voice_states.get(&msg.author.id) {
         Some(voice_state) => {
             let voice_channel_id = voice_state.channel_id.unwrap();
@@ -149,7 +155,7 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
 }
 
 #[group]
-#[commands(ping, muteall, unmuteall, kill, revive, reset)]
+#[commands(ping, help, muteall, unmuteall, kill, revive, reset)]
 struct General;
 
 #[tokio::main]
@@ -185,8 +191,6 @@ async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn muteall(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.reply(ctx, msg.content.as_str()).await?;
-    
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
@@ -203,13 +207,13 @@ async fn muteall(ctx: &Context, msg: &Message) -> CommandResult {
     let game_instance = games.get_mut(&voice_channel_id.0).unwrap();
     game_instance.global_unmute = false;
 
+    msg.reply(ctx, "all players have been muted.").await?;
+
     Ok(())
 }
 
 #[command]
 async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.reply(ctx, msg.content.as_str()).await?;
-
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
@@ -232,13 +236,13 @@ async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
 
     game_instance.global_unmute = true;
 
+    msg.reply(ctx, "all players have been unmuted except for those killed.").await?;
+
     Ok(())
 }
 
 #[command]
 async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.reply(ctx, msg.content.as_str()).await?;
-
     let unparsed_user_id = msg.content.as_str().split(" ").nth(1).unwrap();
     let user_id = parse_username(unparsed_user_id).unwrap();
     let guild = msg.guild(&ctx.cache).await.unwrap();
@@ -261,13 +265,13 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
         },
     }
 
+    msg.reply(ctx, format!("{} has been killed.", unparsed_user_id)).await?;
+
     Ok(())
 }
 
 #[command]
 async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.reply(ctx, msg.content.as_str()).await?;
-
     let unparsed_user_id = msg.content.as_str().split(" ").nth(1).unwrap();
     let user_id = parse_username(unparsed_user_id).unwrap();
     let guild = msg.guild(&ctx.cache).await.unwrap();
@@ -291,13 +295,13 @@ async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
         member.edit(&ctx.http, |em| em.mute(false)).await.unwrap();
     }
 
+    msg.reply(ctx, format!("{} has been revived.", unparsed_user_id)).await?;
+
     Ok(())
 }
 
 #[command]
 async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.reply(ctx, msg.content.as_str()).await?;
-
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
@@ -318,6 +322,29 @@ async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
     }
 
     game_instance.dead_players = HashMap::new();
+
+    msg.reply(ctx, "the dead have been revived.").await?;
+
+    Ok(())
+}
+
+#[command]
+async fn help(ctx: &Context, msg: &Message) -> CommandResult {
+    msg.reply(ctx, "**AmongUsBot Info**\n\
+        The AmongUsBot can only be used from within a Voice Channel. The first person \
+        to type a command while within a Voice Channel, will become the Leader of that \
+        Voice Channel. The Leader controls all muting within the channel. To step down \
+        as Leader, the Leader must reconnect to the Voice Channel.\nMute status *is \
+        not* permanent. As soon as you connect to another Voice Channel, mute status \
+        will disappear.\nEach Voice Channel is a separate game session. One will not \
+        affect the other. Multiple games can be played *independently and \
+        simultaneously* in a server.\n\n\
+        **AmongUsBot Commands**\n\
+        `!muteall` - Mutes all players in the VC\n\
+        `!unmuteall` - Unmutes all players in the VC *except* for those that are dead\n\
+        `!kill <@player>` - Mutes the specified player regardless of unmute\n\
+        `!revive <@player>` - Unkills a dead player\n\
+        `!reset` - Revives all killed players").await?;
 
     Ok(())
 }
