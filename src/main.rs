@@ -10,12 +10,22 @@ use serenity::framework::standard::{
         group
     }
 };
+use serenity::prelude::TypeMapKey;
+use serenity::utils::parse_username;
 
 mod config;
 
-#[group]
-#[commands(ping, muteall, unmuteall, kill, revive, reset)]
-struct General;
+struct DeadList;
+
+impl TypeMapKey for DeadList {
+    type Value = Vec<u64>;
+}
+
+struct CommandUnmuteall;
+
+impl TypeMapKey for CommandUnmuteall {
+    type Value = bool;
+}
 
 struct Handler;
 
@@ -26,6 +36,10 @@ impl EventHandler for Handler {
         ctx.set_activity(Activity::playing("Among Us")).await;
     }
 }
+
+#[group]
+#[commands(ping, muteall, unmuteall, kill, revive, reset)]
+struct General;
 
 #[tokio::main]
 async fn main() {
@@ -38,6 +52,12 @@ async fn main() {
         .framework(framework)
         .await
         .expect("Error creating client");
+
+    {
+        let mut data = client.data.write().await;
+        data.insert::<DeadList>(vec![]);
+        data.insert::<CommandUnmuteall>(true);
+    }
 
     // start listening for events by starting a single shard
     if let Err(why) = client.start().await {
@@ -55,7 +75,7 @@ async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 async fn muteall(ctx: &Context, msg: &Message) -> CommandResult {
     msg.reply(ctx, msg.content.as_str()).await?;
-
+    
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
@@ -66,6 +86,10 @@ async fn muteall(ctx: &Context, msg: &Message) -> CommandResult {
     for member in voice_channel_members.iter() {
         member.edit(&ctx.http, |em| em.mute(true)).await.unwrap();
     }
+
+    let mut data = ctx.data.write().await;
+    let unmuteall = data.get_mut::<CommandUnmuteall>().expect("Expected CommandUnmuteall in TypeMap.");
+    *unmuteall = false;
 
     Ok(())
 }
@@ -81,9 +105,20 @@ async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
     let voice_channel = guild.channels.get(&voice_channel_id).unwrap();
     let voice_channel_members = voice_channel.members(&ctx.cache).await.unwrap();
 
+    let data = ctx.data.read().await;
+    let dead = data.get::<DeadList>().unwrap();
+
     for member in voice_channel_members.iter() {
-        member.edit(&ctx.http, |em| em.mute(false)).await.unwrap();
+        let user_id = member.user.id.0;
+        if dead.iter().position(|&u| u == user_id).is_none() {
+            member.edit(&ctx.http, |em| em.mute(false)).await.unwrap();
+        }
     }
+
+    drop(data);
+    let mut data = ctx.data.write().await;
+    let unmuteall = data.get_mut::<CommandUnmuteall>().expect("Expected CommandUnmuteall in TypeMap.");
+    *unmuteall = true;
 
     Ok(())
 }
@@ -92,6 +127,21 @@ async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
 async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
     msg.reply(ctx, msg.content.as_str()).await?;
 
+    let unparsed_user_id = msg.content.as_str().split(" ").nth(1).unwrap();
+    let user_id = parse_username(unparsed_user_id).unwrap();
+    let mut data = ctx.data.write().await;
+    let dead = data.get_mut::<DeadList>().expect("Expected DeadList in TypeMap.");
+    
+    match dead.iter().position(|&u| u == user_id) {
+        Some(_) => { println!("{} has already been killed", user_id); },
+        None => {
+            dead.push(user_id);
+            let guild = msg.guild(&ctx.cache).await.unwrap();
+            let member = guild.member(&ctx.http, user_id).await.unwrap();
+            member.edit(&ctx.http, |em| em.mute(true)).await.unwrap();
+        },
+    }
+
     Ok(())
 }
 
@@ -99,12 +149,51 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
 async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
     msg.reply(ctx, msg.content.as_str()).await?;
 
+    let unparsed_user_id = msg.content.as_str().split(" ").nth(1).unwrap();
+    let user_id = parse_username(unparsed_user_id).unwrap();
+    let mut data = ctx.data.write().await;
+    let dead = data.get_mut::<DeadList>().expect("Expected DeadList in TypeMap.");
+    
+    match dead.iter().position(|&u| u == user_id) {
+        Some(index) => { dead.remove(index); },
+        None => { println!("{} is already alive", user_id); },
+    }
+
+    drop(data);
+    let data = ctx.data.read().await;
+    let unmuteall = data.get::<CommandUnmuteall>().unwrap();
+
+    if *unmuteall {
+        let guild = msg.guild(&ctx.cache).await.unwrap();
+        let member = guild.member(&ctx.http, user_id).await.unwrap();
+        member.edit(&ctx.http, |em| em.mute(false)).await.unwrap();
+    }
+
     Ok(())
 }
 
 #[command]
 async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
     msg.reply(ctx, msg.content.as_str()).await?;
+
+    let data = ctx.data.read().await;
+    let unmuteall = data.get::<CommandUnmuteall>().unwrap();
+    let unmuteall_stat = *unmuteall;
+
+    drop(data);
+    let mut data = ctx.data.write().await;
+    let dead = data.get_mut::<DeadList>().expect("Expected DeadList in TypeMap.");
+
+    if unmuteall_stat {
+        let guild = msg.guild(&ctx.cache).await.unwrap();
+
+        for &user_id in dead.iter() {
+            let member = guild.member(&ctx.http, user_id).await.unwrap();
+            member.edit(&ctx.http, |em| em.mute(false)).await.unwrap();
+        }
+    }
+
+    *dead = vec![];
 
     Ok(())
 }
