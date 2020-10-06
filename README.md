@@ -25,6 +25,8 @@ Want to invite my AmongUsBot to your Discord server? [Here's the link!](https://
 - DMing commands
 - Document/revise codebase
 - Command Atomicity
+- Command to change prefix for Guild
+- Go back and drop Ctx as early as possible for better async
 
 ## Building
 
