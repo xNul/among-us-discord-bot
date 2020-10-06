@@ -351,7 +351,7 @@ async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn help(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.channel_id.say(&ctx.http, "⁣\n**AmongUsBot Info**\n\
+    msg.channel_id.say(&ctx.http, "⁣\n**Info**\n\
         The AmongUsBot can only be used from within a Voice Channel. The first person \
         to type a command while within a Voice Channel, will become the Leader of that \
         Voice Channel. The Leader controls all muting within the channel. To step down \
@@ -360,12 +360,15 @@ async fn help(ctx: &Context, msg: &Message) -> CommandResult {
         will disappear.\nEach Voice Channel is a separate game session. One will not \
         affect the other. Multiple games can be played *independently and \
         simultaneously* in a server.\n\n\
-        **AmongUsBot Commands**\n\
+        **Commands**\n\
         `!muteall` - Mutes all players in the VC\n\
         `!unmuteall` - Unmutes all players in the VC *except* for those that are dead\n\
         `!kill <@player>` - Mutes the specified player regardless of unmute\n\
         `!revive <@player>` - Unkills a dead player\n\
-        `!reset` - Revives all killed players").await?;
+        `!reset` - Revives all killed players\n\n\
+        **Credit**\n\
+        AmongUsBot built by Blake Wyatt and can be found on Github at \
+        https://github.com/nabakin/among-us-discord-bot").await?;
 
     Ok(())
 }
