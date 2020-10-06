@@ -62,7 +62,7 @@ impl EventHandler for Handler {
                 // If leader leaves, free leader position for the VC.
                 if game_instance.leader_user_id == user_id {
                     game_instance.leader_user_id = 0;
-                    ChannelId(game_instance.recent_text_channel_id).say(_ctx.http, "The Leader has stepped down. No Leader active.").await.unwrap();
+                    ChannelId(game_instance.recent_text_channel_id).say(&_ctx.http, "The Leader has stepped down. No Leader active.").await.unwrap();
                 }
 
                 // Remove player from dead players, if exists.
@@ -75,6 +75,7 @@ impl EventHandler for Handler {
                 let voice_channel = guild.channels.get(&voice_channel_id).unwrap();
                 let voice_channel_members = voice_channel.members(&_ctx.cache).await.unwrap();
                 if voice_channel_members.len() == 0 {
+                    ChannelId(game_instance.recent_text_channel_id).say(&_ctx.http, "No Players are left in the Voice Channel. Game Instance deleted.").await.unwrap();
                     games.remove(&voice_channel_id.0);
                 }
             }
@@ -131,14 +132,14 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
                             game_instance.leader_user_id = user_id;
                             game_instance.recent_text_channel_id = msg.channel_id.0;
                             msg.channel_id.say(&ctx.http, "Congratulations, you \
-                                are now the Leader of this Voice Channel. Only you can mute other \
+                                are now the Leader of this Game Instance! Only you can mute other \
                                 players. To step down, disconnect from the Voice Channel.").await.unwrap();
                             
                             true
                         },
                         _ => {
-                            msg.channel_id.say(&ctx.http, "Access denied. Your Voice Channel \
-                                already has a leader.").await.unwrap();
+                            msg.channel_id.say(&ctx.http, "Access denied. Your Game Instance \
+                                already has a Leader.").await.unwrap();
                             
                             false
                         }
@@ -152,9 +153,11 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
                         dead_players: HashMap::new()
                     };
                     games.insert(voice_channel_id.0, new_game);
+                    msg.channel_id.say(&ctx.http, "Created a new Game Instance.").await.unwrap();
                     msg.channel_id.say(&ctx.http, "Congratulations, you \
-                        are now the leader of this Voice Channel. Only you can mute \
-                        other players. To step down, disconnect from the Voice Channel.").await.unwrap();
+                        are now the Leader of this Game Instance! Only you can mute \
+                        other players. To step down, disconnect from the Voice Channel.")
+                        .await.unwrap();
                     
                     true
                 }
@@ -213,7 +216,7 @@ async fn main() {
         .before(before_hook)
         .after(after_hook)
         .unrecognised_command(unrecognised_command_hook)
-        .configure(|c| c.prefix("!")) // set the bot's prefix to "~"
+        .configure(|c| c.prefix("!"))
         .group(&GENERAL_GROUP);
 
     let mut client = Client::new(config::TOKEN)
@@ -280,7 +283,7 @@ async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
 
     game_instance.global_unmute = true;
 
-    msg.channel_id.say(&ctx.http, "All players have been unmuted except for those killed.").await?;
+    msg.channel_id.say(&ctx.http, "All Players have been unmuted except for those Killed.").await?;
 
     Ok(())
 }
@@ -288,9 +291,9 @@ async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
     let unparsed_user_id = msg.content.as_str().split(" ").nth(1)
-        .ok_or("No User ID found. Mention the user with '!kill @player'.")?;
+        .ok_or("No Player to Kill. Mention the Player with '!kill @Player'.")?;
     let user_id = parse_username(unparsed_user_id)
-        .ok_or("Could not parse User ID. Is it valid? Mention the user with '!kill @player'.")?;
+        .ok_or("Could not parse User ID. Is it valid? Mention the Player with '!kill @Player'.")?;
     let user = UserId(user_id).to_user(ctx).await?;
     let name = match user.nick_in(ctx, msg.guild_id.unwrap()).await {
         Some(nick) => nick,
@@ -308,7 +311,7 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
     
     match dead_players.get(&user_id) {
         Some(_) => {
-            msg.channel_id.say(&ctx.http, format!("{} has already been killed.", name)).await?;
+            msg.channel_id.say(&ctx.http, format!("{} has already been Killed.", name)).await?;
         },
         None => {
             dead_players.insert(user_id, true);
@@ -316,7 +319,7 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
             let member = guild.member(&ctx.http, user_id).await?;
             member.edit(&ctx.http, |em| em.mute(true)).await?;
 
-            msg.channel_id.say(&ctx.http, format!("{} has been killed.", name)).await?;
+            msg.channel_id.say(&ctx.http, format!("{} has been Killed.", name)).await?;
         },
     }
 
@@ -326,9 +329,9 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
     let unparsed_user_id = msg.content.as_str().split(" ").nth(1)
-        .ok_or("No User ID found. Mention the user with '!revive @player'.")?;
+        .ok_or("No Player to Revive. Mention the Player with '!revive @Player'.")?;
     let user_id = parse_username(unparsed_user_id)
-        .ok_or("Could not parse User ID. Is it valid? Mention the user with '!revive @player'.")?;
+        .ok_or("Could not parse User ID. Is it valid? Mention the Player with '!revive @Player'.")?;
     let user = UserId(user_id).to_user(ctx).await?;
     let name = match user.nick_in(ctx, msg.guild_id.unwrap()).await {
         Some(nick) => nick,
@@ -352,10 +355,10 @@ async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
                 let member = guild.member(&ctx.http, user_id).await?;
                 member.edit(&ctx.http, |em| em.mute(false)).await?;
             }
-            msg.channel_id.say(&ctx.http, format!("{} has been revived.", name)).await?;
+            msg.channel_id.say(&ctx.http, format!("{} has been Revived.", name)).await?;
         },
         None => {
-            msg.channel_id.say(&ctx.http, format!("{} is already alive.", name)).await?;
+            msg.channel_id.say(&ctx.http, format!("{} has not been Killed.", name)).await?;
         },
     }
 
@@ -385,7 +388,7 @@ async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
 
     game_instance.dead_players = HashMap::new();
 
-    msg.channel_id.say(&ctx.http, "The dead have been revived.").await?;
+    msg.channel_id.say(&ctx.http, "Those Killed have been Revived.").await?;
 
     Ok(())
 }
@@ -394,22 +397,24 @@ async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
 async fn help(ctx: &Context, msg: &Message) -> CommandResult {
     msg.channel_id.say(&ctx.http, "⁣\n**Info**\n\
         The AmongUsBot can only be used from within a Voice Channel. The first person \
-        to type a command while within a Voice Channel, will become the Leader of that \
-        Voice Channel. The Leader controls all muting within the channel. To step down \
-        as Leader, the Leader must disconnect from the Voice Channel.\nMute status *is \
-        not* permanent. As soon as you connect to another Voice Channel, mute status \
-        will disappear.\nEach Voice Channel is a separate game session. One will not \
-        affect the other. Multiple games can be played *independently and \
-        simultaneously* in a server.\n\n\
+        to type a command while within a Voice Channel, will create a Game Instance for \
+        that Voice Channel and become the Leader of that Voice Channel's Game Instance. \
+        The Leader controls all muting within the channel. To step down as Leader, the \
+        Leader must disconnect from the Voice Channel.\nMute status *is not* permanent. \
+        As soon as someone connects to another Voice Channel, mute status disappears.\nThere \
+        can only be one Game Instance in a Voice Channel. Commands for one will not affect \
+        another. Multiple games can be played *independently and simultaneously* in a server.\n\n\
         **Commands**\n\
-        `!muteall` - Mutes all players in the VC\n\
-        `!unmuteall` - Unmutes all players in the VC *except* for those that are dead\n\
-        `!kill <@player>` - Mutes the specified player regardless of unmute\n\
-        `!revive <@player>` - Unkills a dead player\n\
-        `!reset` - Revives all killed players\n\n\
+        `!muteall` - Mutes all Players in the Voice Chat\n\
+        `!unmuteall` - Unmutes all Players in the Voice Chat *except* for those which are Killed\n\
+        `!kill <@Player>` - Kills or Mutes the given Player regardless of unmute\n\
+        `!revive <@Player>` - Revives or Unmutes a Killed player\n\
+        `!reset` - Revives all Killed Players\n\n\
         **Credit**\n\
-        I was built by nabakin and can be found on GitHub at \
-        https://github.com/nabakin/among-us-discord-bot").await?;
+        Developed by nabakin.\n\nIf you like AmongUsBot, please star it on GitHub. If you \
+        want AmongUsBot in your server, an invite link can be found on GitHub as well. Thanks \
+        for using my bot! https://github.com/nabakin/among-us-discord-bot")
+        .await?;
 
     Ok(())
 }
