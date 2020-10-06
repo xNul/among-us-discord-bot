@@ -181,6 +181,12 @@ async fn after_hook(ctx: &Context, msg: &Message, _: &str, error: Result<(), Com
     }
 }
 
+#[hook]
+async fn unrecognised_command_hook(ctx: &Context, msg: &Message, _: &str) {
+    msg.channel_id.say(&ctx.http, "```Error: Unknown command. Use '!help' for more information.```").await.unwrap();
+    log::warn!("Command \"{}\" sent by \"{}\" in \"{}\" failed with error \"{}\"", msg.content, msg.author.tag(), msg.guild_id.unwrap(), "Unknown command. Use '!help' for more information.");
+}
+
 #[group]
 #[commands(help, muteall, unmuteall, kill, revive, reset)]
 struct General;
@@ -206,6 +212,7 @@ async fn main() {
     let framework = StandardFramework::new()
         .before(before_hook)
         .after(after_hook)
+        .unrecognised_command(unrecognised_command_hook)
         .configure(|c| c.prefix("!")) // set the bot's prefix to "~"
         .group(&GENERAL_GROUP);
 
@@ -281,9 +288,9 @@ async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
     let unparsed_user_id = msg.content.as_str().split(" ").nth(1)
-        .ok_or("No User ID found. Mention the user with '!kill @player'")?;
+        .ok_or("No User ID found. Mention the user with '!kill @player'.")?;
     let user_id = parse_username(unparsed_user_id)
-        .ok_or("Could not parse User ID. Is it valid? Mention the user with '!kill @player'")?;
+        .ok_or("Could not parse User ID. Is it valid? Mention the user with '!kill @player'.")?;
     let user = UserId(user_id).to_user(ctx).await?;
     let name = match user.nick_in(ctx, msg.guild_id.unwrap()).await {
         Some(nick) => nick,
@@ -319,9 +326,9 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
     let unparsed_user_id = msg.content.as_str().split(" ").nth(1)
-        .ok_or("No User ID found. Mention the user with '!revive @player'")?;
+        .ok_or("No User ID found. Mention the user with '!revive @player'.")?;
     let user_id = parse_username(unparsed_user_id)
-        .ok_or("Could not parse User ID. Is it valid? Mention the user with '!revive @player'")?;
+        .ok_or("Could not parse User ID. Is it valid? Mention the user with '!revive @player'.")?;
     let user = UserId(user_id).to_user(ctx).await?;
     let name = match user.nick_in(ctx, msg.guild_id.unwrap()).await {
         Some(nick) => nick,
@@ -389,7 +396,7 @@ async fn help(ctx: &Context, msg: &Message) -> CommandResult {
         The AmongUsBot can only be used from within a Voice Channel. The first person \
         to type a command while within a Voice Channel, will become the Leader of that \
         Voice Channel. The Leader controls all muting within the channel. To step down \
-        as Leader, the Leader must reconnect to the Voice Channel.\nMute status *is \
+        as Leader, the Leader must disconnect from the Voice Channel.\nMute status *is \
         not* permanent. As soon as you connect to another Voice Channel, mute status \
         will disappear.\nEach Voice Channel is a separate game session. One will not \
         affect the other. Multiple games can be played *independently and \
