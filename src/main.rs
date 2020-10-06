@@ -1,37 +1,33 @@
 use std::collections::HashMap;
 
-use serenity::async_trait;
-use serenity::client::{Client, Context, EventHandler};
-use serenity::model::{
-    channel::Message,
-    gateway::{Activity, Ready},
-    voice::VoiceState,
-    id::{GuildId, ChannelId, UserId}
+use serenity::{
+    async_trait,
+    client::{Client, Context, EventHandler},
+    model::{
+        channel::Message,
+        gateway::{Activity, Ready},
+        voice::VoiceState,
+        id::{GuildId, ChannelId, UserId}
+    },
+    framework::standard::{
+        StandardFramework,
+        CommandResult,
+        CommandError,
+        macros::{
+            command,
+            group,
+            hook
+        }
+    },
+    prelude::TypeMapKey,
+    utils::parse_username
 };
-use serenity::framework::standard::{
-    StandardFramework,
-    CommandResult,
-    CommandError,
-    macros::{
-        command,
-        group,
-        hook
-    }
-};
-use serenity::prelude::TypeMapKey;
-use serenity::utils::parse_username;
 
 mod config;
-
-struct Games;
-
-#[derive(Debug)]
-struct GameInstance {
-    leader_user_id: u64,
-    recent_text_channel_id: u64,
-    global_unmute: bool,
-    dead_players: HashMap<u64, bool>
-}
+mod among_us;
+use among_us::*;
+mod option_to_result;
+use option_to_result::ToResult;
 
 impl TypeMapKey for Games {
     type Value = HashMap<u64, GameInstance>;
@@ -165,12 +161,13 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
 #[hook]
 async fn after_hook(ctx: &Context, msg: &Message, _: &str, error: Result<(), CommandError>) {
     if let Err(why) = error {
-        msg.channel_id.say(&ctx.http, format!("Command failed. Try reviewing your syntax.\n```{}```", why)).await.unwrap();
+        msg.channel_id.say(&ctx.http, format!("Error: {}", why)).await.unwrap();
+        println!("Command: {} | Error: {}", msg.content, why);
     }
 }
 
 #[group]
-#[commands(ping, help, muteall, unmuteall, kill, revive, reset)]
+#[commands(help, muteall, unmuteall, kill, revive, reset)]
 struct General;
 
 #[tokio::main]
@@ -199,19 +196,12 @@ async fn main() {
 }
 
 #[command]
-async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.channel_id.say(&ctx.http, "Pong!").await?;
-
-    Ok(())
-}
-
-#[command]
 async fn muteall(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).await.to_result()?;
     let voice_states = guild.voice_states;
-    let voice_state = voice_states.get(&msg.author.id).unwrap();
-    let voice_channel_id = voice_state.channel_id.unwrap();
-    let voice_channel = guild.channels.get(&voice_channel_id).unwrap();
+    let voice_state = voice_states.get(&msg.author.id).to_result()?;
+    let voice_channel_id = voice_state.channel_id.to_result()?;
+    let voice_channel = guild.channels.get(&voice_channel_id).to_result()?;
     let voice_channel_members = voice_channel.members(&ctx.cache).await?;
 
     for member in voice_channel_members.iter() {
@@ -219,8 +209,8 @@ async fn muteall(ctx: &Context, msg: &Message) -> CommandResult {
     }
 
     let mut data = ctx.data.write().await;
-    let games = data.get_mut::<Games>().expect("Expected Games in TypeMap.");
-    let game_instance = games.get_mut(&voice_channel_id.0).unwrap();
+    let games = data.get_mut::<Games>().to_result()?;
+    let game_instance = games.get_mut(&voice_channel_id.0).to_result()?;
     game_instance.global_unmute = false;
 
     msg.channel_id.say(&ctx.http, "All players have been muted.").await?;
@@ -230,16 +220,16 @@ async fn muteall(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).await.to_result()?;
     let voice_states = guild.voice_states;
-    let voice_state = voice_states.get(&msg.author.id).unwrap();
-    let voice_channel_id = voice_state.channel_id.unwrap();
-    let voice_channel = guild.channels.get(&voice_channel_id).unwrap();
+    let voice_state = voice_states.get(&msg.author.id).to_result()?;
+    let voice_channel_id = voice_state.channel_id.to_result()?;
+    let voice_channel = guild.channels.get(&voice_channel_id).to_result()?;
     let voice_channel_members = voice_channel.members(&ctx.cache).await?;
 
     let mut data = ctx.data.write().await;
-    let games = data.get_mut::<Games>().expect("Expected Games in TypeMap.");
-    let game_instance = games.get_mut(&voice_channel_id.0).unwrap();
+    let games = data.get_mut::<Games>().to_result()?;
+    let game_instance = games.get_mut(&voice_channel_id.0).to_result()?;
     let dead_players = &game_instance.dead_players;
 
     for member in voice_channel_members.iter() {
@@ -259,21 +249,23 @@ async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
-    let unparsed_user_id = msg.content.as_str().split(" ").nth(1).unwrap();
-    let user_id = parse_username(unparsed_user_id).unwrap(); // bug here sometimes
+    let unparsed_user_id = msg.content.as_str().split(" ").nth(1)
+        .ok_or("No User ID found. Type with @Player")?;
+    let user_id = parse_username(unparsed_user_id)
+        .ok_or("Could not parse User ID. Is it valid? Type with @Player")?;
     let user = UserId(user_id).to_user(ctx).await?;
-    let name = match user.nick_in(ctx, msg.guild_id.unwrap()).await {
+    let name = match user.nick_in(ctx, msg.guild_id.to_result()?).await {
         Some(nick) => nick,
         None => user.name
     };
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).await.to_result()?;
     let voice_states = guild.voice_states;
-    let voice_state = voice_states.get(&msg.author.id).unwrap();
-    let voice_channel_id = voice_state.channel_id.unwrap();
+    let voice_state = voice_states.get(&msg.author.id).to_result()?;
+    let voice_channel_id = voice_state.channel_id.to_result()?;
 
     let mut data = ctx.data.write().await;
-    let games = data.get_mut::<Games>().expect("Expected Games in TypeMap.");
-    let game_instance = games.get_mut(&voice_channel_id.0).unwrap();
+    let games = data.get_mut::<Games>().to_result()?;
+    let game_instance = games.get_mut(&voice_channel_id.0).to_result()?;
     let dead_players = &mut game_instance.dead_players;
     
     match dead_players.get(&user_id) {
@@ -282,7 +274,7 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
         },
         None => {
             dead_players.insert(user_id, true);
-            let guild = msg.guild(&ctx.cache).await.unwrap();
+            let guild = msg.guild(&ctx.cache).await.to_result()?;
             let member = guild.member(&ctx.http, user_id).await?;
             member.edit(&ctx.http, |em| em.mute(true)).await?;
 
@@ -295,28 +287,30 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
-    let unparsed_user_id = msg.content.as_str().split(" ").nth(1).unwrap();
-    let user_id = parse_username(unparsed_user_id).unwrap();
+    let unparsed_user_id = msg.content.as_str().split(" ").nth(1)
+        .ok_or("No User ID found. Type with @Player")?;
+    let user_id = parse_username(unparsed_user_id)
+        .ok_or("Could not parse User ID. Is it valid? Type with @Player")?;
     let user = UserId(user_id).to_user(ctx).await?;
-    let name = match user.nick_in(ctx, msg.guild_id.unwrap()).await {
+    let name = match user.nick_in(ctx, msg.guild_id.to_result()?).await {
         Some(nick) => nick,
         None => user.name
     };
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).await.to_result()?;
     let voice_states = guild.voice_states;
-    let voice_state = voice_states.get(&msg.author.id).unwrap();
-    let voice_channel_id = voice_state.channel_id.unwrap();
+    let voice_state = voice_states.get(&msg.author.id).to_result()?;
+    let voice_channel_id = voice_state.channel_id.to_result()?;
 
     let mut data = ctx.data.write().await;
-    let games = data.get_mut::<Games>().expect("Expected Games in TypeMap.");
-    let game_instance = games.get_mut(&voice_channel_id.0).unwrap();
+    let games = data.get_mut::<Games>().to_result()?;
+    let game_instance = games.get_mut(&voice_channel_id.0).to_result()?;
     let dead_players = &mut game_instance.dead_players;
     
     match dead_players.get(&user_id) {
         Some(_) => { 
             dead_players.remove(&user_id);
             if game_instance.global_unmute {
-                let guild = msg.guild(&ctx.cache).await.unwrap();
+                let guild = msg.guild(&ctx.cache).await.to_result()?;
                 let member = guild.member(&ctx.http, user_id).await?;
                 member.edit(&ctx.http, |em| em.mute(false)).await?;
             }
@@ -332,18 +326,18 @@ async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).await.to_result()?;
     let voice_states = guild.voice_states;
-    let voice_state = voice_states.get(&msg.author.id).unwrap();
-    let voice_channel_id = voice_state.channel_id.unwrap();
+    let voice_state = voice_states.get(&msg.author.id).to_result()?;
+    let voice_channel_id = voice_state.channel_id.to_result()?;
 
     let mut data = ctx.data.write().await;
-    let games = data.get_mut::<Games>().expect("Expected Games in TypeMap.");
-    let game_instance = games.get_mut(&voice_channel_id.0).unwrap();
+    let games = data.get_mut::<Games>().to_result()?;
+    let game_instance = games.get_mut(&voice_channel_id.0).to_result()?;
     let dead_players = &game_instance.dead_players;
 
     if game_instance.global_unmute {
-        let guild = msg.guild(&ctx.cache).await.unwrap();
+        let guild = msg.guild(&ctx.cache).await.to_result()?;
 
         for &user_id in dead_players.keys() {
             let member = guild.member(&ctx.http, user_id).await?;

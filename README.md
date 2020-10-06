@@ -11,6 +11,7 @@ Hands-free Discord bot to help people in your Discord server play Among Us. Your
 - Simple and intuitive commands built for the game.
 - Asynchronous and built in Rust for the best performance.
 - Only needs two permissions to operate.
+- Good error handling
 
 ## My Bot Invite
 
@@ -25,6 +26,7 @@ Want to invite my AmongUsBot to your Discord server? [Here's the link!](https://
 - Console logging
 - Documentation and code optimization
 - Command Atomicity
+- Add error messages and ToResult trait for all serenity-rs data types
 
 ## Building
 
