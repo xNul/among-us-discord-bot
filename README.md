@@ -11,7 +11,7 @@ Hands-free Discord bot to help people in your Discord server play Among Us. Your
 - Simple and intuitive commands built for the game.
 - Asynchronous and built in Rust for the best performance.
 - Only needs two permissions to operate.
-- Good error handling
+- Basic error handling and logging
 
 ## My Bot Invite
 
@@ -23,16 +23,14 @@ Want to invite my AmongUsBot to your Discord server? [Here's the link!](https://
 - Predefined text channel for each voice channel
 - Retain mutes given as punishment
 - DMing commands
-- Console logging
-- Documentation and code optimization
+- Document/revise codebase
 - Command Atomicity
-- Add error messages and ToResult trait for all serenity-rs data types
 
 ## Building
 
 Before you are able to build the bot, you must create a bot application with Discord and grab the token. Once you have the it, create a file called `config.rs` and add this code to it:
 
-```
+```rust
 pub static TOKEN: &'static str = "<discord bot token here>";
 ```
 

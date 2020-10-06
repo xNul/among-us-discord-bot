@@ -9,3 +9,6 @@ edition = "2018"
 [dependencies]
 serenity = "0.9.0-rc.1"
 tokio = "0.2.22"
+chrono = "0.4.18"
+env_logger = "0.7.1"
+log = "0.4.11"
