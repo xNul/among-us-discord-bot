@@ -105,7 +105,7 @@ impl EventHandler for Handler {
 
 #[hook]
 async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx.cache).await.unwrap(); // bug here sometimes
     let voice_states = guild.voice_states;
     let user_id = msg.author.id.0;
     
@@ -128,7 +128,7 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
                         0 => {
                             game_instance.leader_user_id = user_id;
                             game_instance.recent_text_channel_id = msg.channel_id.0;
-                            msg.channel_id.say(&ctx.http, "Congratulations, you are now the leader of this Voice Channel. Only you can mute other players. To step down, disconnect from the Voice Channel.").await.unwrap();
+                            msg.channel_id.say(&ctx.http, "Congratulations, you are now the Leader of this Voice Channel. Only you can mute other players. To step down, disconnect from the Voice Channel.").await.unwrap();
                             true
                         },
                         _ => {
@@ -251,9 +251,12 @@ async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
     let unparsed_user_id = msg.content.as_str().split(" ").nth(1).unwrap();
-    let user_id = parse_username(unparsed_user_id).unwrap();
+    let user_id = parse_username(unparsed_user_id).unwrap(); // bug here sometimes
     let user = UserId(user_id).to_user(ctx).await.unwrap();
-    let nick = user.nick_in(ctx, msg.guild_id.unwrap()).await.unwrap();
+    let name = match user.nick_in(ctx, msg.guild_id.unwrap()).await {
+        Some(nick) => nick,
+        None => user.name
+    };
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
@@ -266,7 +269,7 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
     
     match dead_players.get(&user_id) {
         Some(_) => {
-            msg.channel_id.say(&ctx.http, format!("{} has already been killed.", nick)).await?;
+            msg.channel_id.say(&ctx.http, format!("{} has already been killed.", name)).await?;
         },
         None => {
             dead_players.insert(user_id, true);
@@ -274,7 +277,7 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
             let member = guild.member(&ctx.http, user_id).await.unwrap();
             member.edit(&ctx.http, |em| em.mute(true)).await.unwrap();
 
-            msg.channel_id.say(&ctx.http, format!("{} has been killed.", nick)).await?;
+            msg.channel_id.say(&ctx.http, format!("{} has been killed.", name)).await?;
         },
     }
 
@@ -286,7 +289,10 @@ async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
     let unparsed_user_id = msg.content.as_str().split(" ").nth(1).unwrap();
     let user_id = parse_username(unparsed_user_id).unwrap();
     let user = UserId(user_id).to_user(ctx).await.unwrap();
-    let nick = user.nick_in(ctx, msg.guild_id.unwrap()).await.unwrap();
+    let name = match user.nick_in(ctx, msg.guild_id.unwrap()).await {
+        Some(nick) => nick,
+        None => user.name
+    };
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
@@ -305,10 +311,10 @@ async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
                 let member = guild.member(&ctx.http, user_id).await.unwrap();
                 member.edit(&ctx.http, |em| em.mute(false)).await.unwrap();
             }
-            msg.channel_id.say(&ctx.http, format!("{} has been revived.", nick)).await?;
+            msg.channel_id.say(&ctx.http, format!("{} has been revived.", name)).await?;
         },
         None => {
-            msg.channel_id.say(&ctx.http, format!("{} is already alive.", nick)).await?;
+            msg.channel_id.say(&ctx.http, format!("{} is already alive.", name)).await?;
         },
     }
 
