@@ -408,7 +408,7 @@ async fn help(ctx: &Context, msg: &Message) -> CommandResult {
         `!revive <@player>` - Unkills a dead player\n\
         `!reset` - Revives all killed players\n\n\
         **Credit**\n\
-        AmongUsBot built by Blake Wyatt and can be found on Github at \
+        I was built by nabakin and can be found on GitHub at \
         https://github.com/nabakin/among-us-discord-bot").await?;
 
     Ok(())
