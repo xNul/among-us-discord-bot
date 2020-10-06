@@ -14,7 +14,7 @@ Hands-free Discord bot to help people in your Discord server play Among Us. Your
 
 ## My Bot Invite
 
-Want to invite my Among Us Bot to your Discord server? [Here's the link!](https://discord.com/api/oauth2/authorize?client_id=754473493201944586&permissions=4196352&scope=bot)
+Want to invite my AmongUsBot to your Discord server? [Here's the link!](https://discord.com/api/oauth2/authorize?client_id=754473493201944586&permissions=4196352&scope=bot)
 
 ## Planned Features
 
@@ -24,6 +24,7 @@ Want to invite my Among Us Bot to your Discord server? [Here's the link!](https:
 - DMing commands
 - Console logging
 - Documentation and code optimization
+- Command Atomicity
 
 ## Building
 
@@ -35,10 +36,10 @@ pub static TOKEN: &'static str = "<discord bot token here>";
 
 Afterwards, place the `config.rs` under the `src` folder.
 
-Now you use Cargo, the Rust package manager, to build the executable. Once you have installed Cargo, clone this repository, add your `config.rs` and run:
+Now you use Cargo, the Rust package manager, to build the executable. Once you have installed Cargo, clone this repository, add your `config.rs`, and run:
 
 ```
 cargo build --release
 ```
 
-The executable will be under `target/release/`.
+the resulting executable will be under `target/release/`.
