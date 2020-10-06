@@ -15,7 +15,7 @@ Hands-free Discord bot to help people in your Discord server play Among Us. Your
 
 ## My Bot Invite
 
-Want to invite my AmongUsBot to your Discord server? [Here's the link!](https://discord.com/api/oauth2/authorize?client_id=754473493201944586&permissions=4196352&scope=bot)
+Want to invite my AmongUsBot to your Discord server? [Here's the link!](https://discord.com/api/oauth2/authorize?client_id=754473493201944586&permissions=4196352&scope=bot) Use `!help` to get started.
 
 ## Planned Features
 
