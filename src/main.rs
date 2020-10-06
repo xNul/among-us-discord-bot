@@ -191,7 +191,7 @@ async fn unrecognised_command_hook(ctx: &Context, msg: &Message, _: &str) {
 }
 
 #[group]
-#[commands(help, muteall, unmuteall, kill, revive, reset)]
+#[commands(help, play, discuss, kill, revive, reset)]
 struct General;
 
 #[tokio::main]
@@ -237,7 +237,7 @@ async fn main() {
 }
 
 #[command]
-async fn muteall(ctx: &Context, msg: &Message) -> CommandResult {
+async fn play(ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
@@ -254,13 +254,13 @@ async fn muteall(ctx: &Context, msg: &Message) -> CommandResult {
     let game_instance = games.get_mut(&voice_channel_id.0).unwrap();
     game_instance.global_unmute = false;
 
-    msg.channel_id.say(&ctx.http, "All players have been muted.").await?;
+    msg.channel_id.say(&ctx.http, "All Players have been muted.").await?;
 
     Ok(())
 }
 
 #[command]
-async fn unmuteall(ctx: &Context, msg: &Message) -> CommandResult {
+async fn discuss(ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
@@ -405,9 +405,9 @@ async fn help(ctx: &Context, msg: &Message) -> CommandResult {
         can only be one Game Instance in a Voice Channel. Commands for one will not affect \
         another. Multiple games can be played *independently and simultaneously* in a server.\n\n\
         **Commands**\n\
-        `!muteall` - Mutes all Players in the Voice Chat\n\
-        `!unmuteall` - Unmutes all Players in the Voice Chat *except* for those which are Killed\n\
-        `!kill <@Player>` - Kills or Mutes the given Player regardless of unmute\n\
+        `!play` - Mutes all Players in the Voice Chat\n\
+        `!discuss` - Unmutes all Players in the Voice Chat *except* for those which are Killed\n\
+        `!kill <@Player>` - Kills or Mutes the given Player regardless of Unmute\n\
         `!revive <@Player>` - Revives or Unmutes a Killed player\n\
         `!reset` - Revives all Killed Players\n\n\
         **Credit**\n\
