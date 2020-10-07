@@ -54,8 +54,9 @@ impl EventHandler for Handler {
             let voice_state = _old.unwrap();
             let voice_channel_id = voice_state.channel_id.unwrap();
             let user_id = voice_state.user_id.0;
+            let user_tag = voice_state.user_id.to_user(&_ctx.http).await.unwrap().tag();
 
-            log::info!("\"{}\" is leaving Voice Channel \"{}\" in Guild \"{}\"", voice_state.user_id.to_user(&_ctx.http).await.unwrap().tag(), voice_channel_id, guild_id);
+            log::info!("\"{}\" is leaving Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id);
 
             // If a game existed for the VC.
             let mut data = _ctx.data.write().await;
@@ -63,6 +64,7 @@ impl EventHandler for Handler {
             if let Some(game_instance) = games.get_mut(&voice_channel_id.0) {
                 // If leader leaves, free leader position for the VC.
                 if game_instance.leader_user_id == user_id {
+                    log::info!("\"{}\" has stepped down as Leader of Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id);
                     game_instance.leader_user_id = 0;
                     ChannelId(game_instance.recent_text_channel_id).say(&_ctx.http, "The Leader has stepped down. No Leader active.").await.unwrap();
                 }
@@ -77,6 +79,7 @@ impl EventHandler for Handler {
                 let voice_channel = guild.channels.get(&voice_channel_id).unwrap();
                 let voice_channel_members = voice_channel.members(&_ctx.cache).await.unwrap();
                 if voice_channel_members.len() == 0 {
+                    log::info!("No Players left. Deleting Game Instance of Voice Channel \"{}\" in Guild \"{}\"", voice_channel_id, guild_id);
                     ChannelId(game_instance.recent_text_channel_id).say(&_ctx.http, "No Players are left in the Voice Channel. Game Instance deleted.").await.unwrap();
                     games.remove(&voice_channel_id.0);
                 }
@@ -85,8 +88,9 @@ impl EventHandler for Handler {
             let voice_state = _new;
             let voice_channel_id = voice_state.channel_id.unwrap();
             let user_id = voice_state.user_id.0;
+            let user_tag = voice_state.user_id.to_user(&_ctx.http).await.unwrap().tag();
 
-            log::info!("\"{}\" is joining Voice Channel \"{}\" in Guild \"{}\"", voice_state.user_id.to_user(&_ctx.http).await.unwrap().tag(), voice_channel_id, guild_id);
+            log::info!("\"{}\" is joining Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id);
 
             let mut game_muted = false;
 
@@ -111,7 +115,8 @@ impl EventHandler for Handler {
 #[hook]
 async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
     let guild_id = msg.guild_id.unwrap();
-    log::info!("Command \"{}\" sent by \"{}\" in \"{}\"", msg.content, msg.author.tag(), guild_id);
+    let user_tag = msg.author.tag();
+    log::info!("Command \"{}\" sent by \"{}\" in \"{}\"", msg.content, user_tag, guild_id);
 
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
@@ -134,7 +139,7 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
                             true
                         },
                         0 => {
-                            log::info!("\"{}\" has become the Leader of Voice Channel \"{}\" in Guild \"{}\"", voice_state.user_id.to_user(&ctx.http).await.unwrap().tag(), voice_channel_id, guild_id);
+                            log::info!("\"{}\" has become the Leader of Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id);
 
                             game_instance.leader_user_id = user_id;
                             game_instance.recent_text_channel_id = msg.channel_id.0;
@@ -154,7 +159,7 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
                 },
                 None => {
                     log::info!("Creating a new Game Instance for Voice Channel \"{}\" in Guild \"{}\"", voice_channel_id, guild_id);
-                    log::info!("\"{}\" has become the Leader of Voice Channel \"{}\" in Guild \"{}\"", voice_state.user_id.to_user(&ctx.http).await.unwrap().tag(), voice_channel_id, guild_id);
+                    log::info!("\"{}\" has become the Leader of Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id);
                     let new_game = GameInstance{
                         leader_user_id: user_id,
                         recent_text_channel_id: msg.channel_id.0,
