@@ -41,7 +41,7 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        log::info!("{} is connected!", ready.user.name);
         ctx.set_activity(Activity::playing("Among Us")).await;
     }
 
@@ -54,6 +54,8 @@ impl EventHandler for Handler {
             let voice_state = _old.unwrap();
             let voice_channel_id = voice_state.channel_id.unwrap();
             let user_id = voice_state.user_id.0;
+
+            log::info!("\"{}\" is leaving Voice Channel \"{}\" in Guild \"{}\"", voice_state.user_id.to_user(&_ctx.http).await.unwrap().tag(), voice_channel_id, guild_id);
 
             // If a game existed for the VC.
             let mut data = _ctx.data.write().await;
@@ -84,6 +86,8 @@ impl EventHandler for Handler {
             let voice_channel_id = voice_state.channel_id.unwrap();
             let user_id = voice_state.user_id.0;
 
+            log::info!("\"{}\" is joining Voice Channel \"{}\" in Guild \"{}\"", voice_state.user_id.to_user(&_ctx.http).await.unwrap().tag(), voice_channel_id, guild_id);
+
             let mut game_muted = false;
 
             // If a game existed for the VC, check if it's muted.
@@ -106,7 +110,8 @@ impl EventHandler for Handler {
 
 #[hook]
 async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
-    log::info!("Command \"{}\" sent by \"{}\" in \"{}\"", msg.content, msg.author.tag(), msg.guild_id.unwrap());
+    let guild_id = msg.guild_id.unwrap();
+    log::info!("Command \"{}\" sent by \"{}\" in \"{}\"", msg.content, msg.author.tag(), guild_id);
 
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
@@ -129,6 +134,8 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
                             true
                         },
                         0 => {
+                            log::info!("\"{}\" has become the Leader of Voice Channel \"{}\" in Guild \"{}\"", voice_state.user_id.to_user(&ctx.http).await.unwrap().tag(), voice_channel_id, guild_id);
+
                             game_instance.leader_user_id = user_id;
                             game_instance.recent_text_channel_id = msg.channel_id.0;
                             msg.channel_id.say(&ctx.http, "Congratulations, you \
@@ -146,6 +153,8 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
                     }
                 },
                 None => {
+                    log::info!("Creating a new Game Instance for Voice Channel \"{}\" in Guild \"{}\"", voice_channel_id, guild_id);
+                    log::info!("\"{}\" has become the Leader of Voice Channel \"{}\" in Guild \"{}\"", voice_state.user_id.to_user(&ctx.http).await.unwrap().tag(), voice_channel_id, guild_id);
                     let new_game = GameInstance{
                         leader_user_id: user_id,
                         recent_text_channel_id: msg.channel_id.0,
