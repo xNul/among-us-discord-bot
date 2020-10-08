@@ -26,10 +26,8 @@ Want to invite my AmongUsBot to your Discord server? [Here's the link!](https://
 - DMing commands
 - Document/revise codebase
 - Command Atomicity
-- Command to change prefix for Guild
 - Go back and drop Ctx as early as possible for better async
 - Game instance voice channel list (so that games cannot be started on all channels and still retain safe server unmute)
-- Have `!reset` Unmute as well as Revive everyone after command name change
 
 ## Building
 

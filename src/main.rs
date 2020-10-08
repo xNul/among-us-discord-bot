@@ -118,7 +118,7 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
     let user_tag = msg.author.tag();
     log(LOG::INFO, format!("Command \"{}\" sent by \"{}\" in \"{}\"", msg.content, user_tag, guild_id));
 
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx).await.unwrap();
     let voice_states = guild.voice_states;
     let user_id = msg.author.id.0;
     
@@ -143,14 +143,14 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
 
                             game_instance.leader_user_id = user_id;
                             game_instance.recent_text_channel_id = msg.channel_id.0;
-                            msg.channel_id.say(&ctx.http, "Congratulations, you \
+                            msg.channel_id.say(&ctx, "Congratulations, you \
                                 are now the Leader of this Game Instance! Only you can mute other \
                                 players. To step down, disconnect from the Voice Channel.").await.unwrap();
                             
                             true
                         },
                         _ => {
-                            msg.channel_id.say(&ctx.http, "Access denied. Your Game Instance \
+                            msg.channel_id.say(&ctx, "Access denied. Your Game Instance \
                                 already has a Leader.").await.unwrap();
                             
                             false
@@ -167,8 +167,8 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
                         dead_players: HashMap::new()
                     };
                     games.insert(voice_channel_id.0, new_game);
-                    msg.channel_id.say(&ctx.http, "Created a new Game Instance.").await.unwrap();
-                    msg.channel_id.say(&ctx.http, "Congratulations, you \
+                    msg.channel_id.say(&ctx, "Created a new Game Instance.").await.unwrap();
+                    msg.channel_id.say(&ctx, "Congratulations, you \
                         are now the Leader of this Game Instance! Only you can mute \
                         other players. To step down, disconnect from the Voice Channel.")
                         .await.unwrap();
@@ -179,7 +179,7 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
         },
         None => { 
             if cmd_name != "help" && cmd_name != "prefix" {
-                msg.channel_id.say(&ctx.http, "Please enter Voice Chat before \
+                msg.channel_id.say(&ctx, "Please enter Voice Chat before \
                     using Game commands.").await.unwrap();
                 
                 false
@@ -193,7 +193,7 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
 #[hook]
 async fn after_hook(ctx: &Context, msg: &Message, _: &str, error: Result<(), CommandError>) {
     if let Err(why) = error {
-        msg.channel_id.say(&ctx.http, format!("```Error: {}```", why)).await.unwrap();
+        msg.channel_id.say(&ctx, format!("```Error: {}```", why)).await.unwrap();
         log(LOG::WARN, format!("Command \"{}\" sent by \"{}\" in \"{}\" failed with error \"{}\"", msg.content, msg.author.tag(), msg.guild_id.unwrap(), why));
     }
 }
@@ -253,7 +253,7 @@ async fn prefix(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let prefixes = data.get_mut::<PrefixMap>().unwrap();
     let default_prefix = String::from("!");
     let guild_id = msg.guild_id.unwrap();
-    let guild_name = msg.guild(&ctx.cache).await.unwrap().name;
+    let guild_name = msg.guild(&ctx).await.unwrap().name;
 
     if args.is_empty() {
         let cur_prefix = match prefixes.get(&guild_id) {
@@ -265,8 +265,8 @@ async fn prefix(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         return Ok(())
     }
 
-    let member = msg.member(&ctx.http).await.unwrap();
-    let member_perms = member.permissions(&ctx.cache).await.unwrap();
+    let member = msg.member(&ctx).await.unwrap();
+    let member_perms = member.permissions(&ctx).await.unwrap();
     let administrator_perm = member_perms.administrator();
 
     if !administrator_perm {
@@ -288,15 +288,15 @@ async fn prefix(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
 #[command]
 async fn play(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
     let voice_channel_id = voice_state.channel_id.unwrap();
     let voice_channel = guild.channels.get(&voice_channel_id).unwrap();
-    let voice_channel_members = voice_channel.members(&ctx.cache).await?;
+    let voice_channel_members = voice_channel.members(&ctx).await?;
 
     for member in voice_channel_members.iter() {
-        member.edit(&ctx.http, |em| em.mute(true)).await?;
+        member.edit(&ctx, |em| em.mute(true)).await?;
     }
 
     let mut data = ctx.data.write().await;
@@ -304,19 +304,19 @@ async fn play(ctx: &Context, msg: &Message) -> CommandResult {
     let game_instance = games.get_mut(&voice_channel_id.0).unwrap();
     game_instance.global_unmute = false;
 
-    msg.channel_id.say(&ctx.http, "All Players have been muted.").await?;
+    msg.channel_id.say(&ctx, "All Players have been muted.").await?;
 
     Ok(())
 }
 
 #[command]
 async fn discuss(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
     let voice_channel_id = voice_state.channel_id.unwrap();
     let voice_channel = guild.channels.get(&voice_channel_id).unwrap();
-    let voice_channel_members = voice_channel.members(&ctx.cache).await?;
+    let voice_channel_members = voice_channel.members(&ctx).await?;
 
     let mut data = ctx.data.write().await;
     let games = data.get_mut::<Games>().unwrap();
@@ -327,13 +327,13 @@ async fn discuss(ctx: &Context, msg: &Message) -> CommandResult {
         let user_id = member.user.id.0;
         let dead_player = dead_players.get(&user_id);
         if dead_player.is_none() {
-            member.edit(&ctx.http, |em| em.mute(false)).await?;
+            member.edit(&ctx, |em| em.mute(false)).await?;
         }
     }
 
     game_instance.global_unmute = true;
 
-    msg.channel_id.say(&ctx.http, "All Players have been unmuted except for those Killed.").await?;
+    msg.channel_id.say(&ctx, "All Players have been unmuted except for those Killed.").await?;
 
     Ok(())
 }
@@ -349,7 +349,7 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
         Some(nick) => nick,
         None => user.name
     };
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
     let voice_channel_id = voice_state.channel_id.unwrap();
@@ -361,15 +361,15 @@ async fn kill(ctx: &Context, msg: &Message) -> CommandResult {
     
     match dead_players.get(&user_id) {
         Some(_) => {
-            msg.channel_id.say(&ctx.http, format!("{} has already been Killed.", name)).await?;
+            msg.channel_id.say(&ctx, format!("{} has already been Killed.", name)).await?;
         },
         None => {
             dead_players.insert(user_id, true);
-            let guild = msg.guild(&ctx.cache).await.unwrap();
-            let member = guild.member(&ctx.http, user_id).await?;
-            member.edit(&ctx.http, |em| em.mute(true)).await?;
+            let guild = msg.guild(&ctx).await.unwrap();
+            let member = guild.member(&ctx, user_id).await?;
+            member.edit(&ctx, |em| em.mute(true)).await?;
 
-            msg.channel_id.say(&ctx.http, format!("{} has been Killed.", name)).await?;
+            msg.channel_id.say(&ctx, format!("{} has been Killed.", name)).await?;
         },
     }
 
@@ -387,7 +387,7 @@ async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
         Some(nick) => nick,
         None => user.name
     };
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
     let voice_channel_id = voice_state.channel_id.unwrap();
@@ -401,14 +401,14 @@ async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
         Some(_) => { 
             dead_players.remove(&user_id);
             if game_instance.global_unmute {
-                let guild = msg.guild(&ctx.cache).await.unwrap();
-                let member = guild.member(&ctx.http, user_id).await?;
-                member.edit(&ctx.http, |em| em.mute(false)).await?;
+                let guild = msg.guild(&ctx).await.unwrap();
+                let member = guild.member(&ctx, user_id).await?;
+                member.edit(&ctx, |em| em.mute(false)).await?;
             }
-            msg.channel_id.say(&ctx.http, format!("{} has been Revived.", name)).await?;
+            msg.channel_id.say(&ctx, format!("{} has been Revived.", name)).await?;
         },
         None => {
-            msg.channel_id.say(&ctx.http, format!("{} has not been Killed.", name)).await?;
+            msg.channel_id.say(&ctx, format!("{} has not been Killed.", name)).await?;
         },
     }
 
@@ -417,12 +417,12 @@ async fn revive(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).await.unwrap();
+    let guild = msg.guild(&ctx).await.unwrap();
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
     let voice_channel_id = voice_state.channel_id.unwrap();
     let voice_channel = guild.channels.get(&voice_channel_id).unwrap();
-    let voice_channel_members = voice_channel.members(&ctx.cache).await?;
+    let voice_channel_members = voice_channel.members(&ctx).await?;
 
     let mut data = ctx.data.write().await;
     let games = data.get_mut::<Games>().unwrap();
@@ -431,19 +431,19 @@ async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
     game_instance.dead_players = HashMap::new();
 
     for member in voice_channel_members.iter() {
-        member.edit(&ctx.http, |em| em.mute(false)).await?;
+        member.edit(&ctx, |em| em.mute(false)).await?;
     }
 
     game_instance.global_unmute = true;
 
-    msg.channel_id.say(&ctx.http, "The Game Instance has been Reset.").await?;
+    msg.channel_id.say(&ctx, "The Game Instance has been Reset.").await?;
 
     Ok(())
 }
 
 #[command]
 async fn help(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.channel_id.say(&ctx.http, "⁣\n**Info**\n\
+    msg.channel_id.say(&ctx, "⁣\n**Info**\n\
         I can only be used from within a Voice Channel. The first person \
         to type a command while within a Voice Channel, will create a Game Instance for \
         that Voice Channel and become the Leader of that Voice Channel's Game Instance. \
