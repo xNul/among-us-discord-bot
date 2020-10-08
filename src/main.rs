@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 use std::panic;
-use std::io::Write;
 use chrono::Local;
-use env_logger::Builder;
-use log::LevelFilter;
 
 use serenity::{
     async_trait,
@@ -18,6 +15,7 @@ use serenity::{
         StandardFramework,
         CommandResult,
         CommandError,
+        Args,
         macros::{
             command,
             group,
@@ -32,8 +30,10 @@ mod config;
 mod among_us;
 use among_us::*;
 
-impl TypeMapKey for Games {
-    type Value = HashMap<u64, GameInstance>;
+pub struct PrefixMap;
+
+impl TypeMapKey for PrefixMap {
+    type Value = HashMap<GuildId, String>;
 }
 
 struct Handler;
@@ -41,7 +41,7 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
-        log::info!("{} is connected!", ready.user.name);
+        log(LOG::INFO, format!("{} is connected!", ready.user.name));
         ctx.set_activity(Activity::playing("Among Us")).await;
     }
 
@@ -56,7 +56,7 @@ impl EventHandler for Handler {
             let user_id = voice_state.user_id.0;
             let user_tag = voice_state.user_id.to_user(&_ctx.http).await.unwrap().tag();
 
-            log::info!("\"{}\" is leaving Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id);
+            log(LOG::INFO, format!("\"{}\" is leaving Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id));
 
             // If a game existed for the VC.
             let mut data = _ctx.data.write().await;
@@ -64,7 +64,7 @@ impl EventHandler for Handler {
             if let Some(game_instance) = games.get_mut(&voice_channel_id.0) {
                 // If leader leaves, free leader position for the VC.
                 if game_instance.leader_user_id == user_id {
-                    log::info!("\"{}\" has stepped down as Leader of Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id);
+                    log(LOG::INFO, format!("\"{}\" has stepped down as Leader of Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id));
                     game_instance.leader_user_id = 0;
                     ChannelId(game_instance.recent_text_channel_id).say(&_ctx.http, "The Leader has stepped down. No Leader active.").await.unwrap();
                 }
@@ -79,7 +79,7 @@ impl EventHandler for Handler {
                 let voice_channel = guild.channels.get(&voice_channel_id).unwrap();
                 let voice_channel_members = voice_channel.members(&_ctx.cache).await.unwrap();
                 if voice_channel_members.len() == 0 {
-                    log::info!("No Players left. Deleting Game Instance of Voice Channel \"{}\" in Guild \"{}\"", voice_channel_id, guild_id);
+                    log(LOG::INFO, format!("No Players left. Deleting Game Instance of Voice Channel \"{}\" in Guild \"{}\"", voice_channel_id, guild_id));
                     ChannelId(game_instance.recent_text_channel_id).say(&_ctx.http, "No Players are left in the Voice Channel. Game Instance deleted.").await.unwrap();
                     games.remove(&voice_channel_id.0);
                 }
@@ -90,7 +90,7 @@ impl EventHandler for Handler {
             let user_id = voice_state.user_id.0;
             let user_tag = voice_state.user_id.to_user(&_ctx.http).await.unwrap().tag();
 
-            log::info!("\"{}\" is joining Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id);
+            log(LOG::INFO, format!("\"{}\" is joining Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id));
 
             let mut game_muted = false;
 
@@ -116,7 +116,7 @@ impl EventHandler for Handler {
 async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
     let guild_id = msg.guild_id.unwrap();
     let user_tag = msg.author.tag();
-    log::info!("Command \"{}\" sent by \"{}\" in \"{}\"", msg.content, user_tag, guild_id);
+    log(LOG::INFO, format!("Command \"{}\" sent by \"{}\" in \"{}\"", msg.content, user_tag, guild_id));
 
     let guild = msg.guild(&ctx.cache).await.unwrap();
     let voice_states = guild.voice_states;
@@ -139,7 +139,7 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
                             true
                         },
                         0 => {
-                            log::info!("\"{}\" has become the Leader of Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id);
+                            log(LOG::INFO, format!("\"{}\" has become the Leader of Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id));
 
                             game_instance.leader_user_id = user_id;
                             game_instance.recent_text_channel_id = msg.channel_id.0;
@@ -158,8 +158,8 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
                     }
                 },
                 None => {
-                    log::info!("Creating a new Game Instance for Voice Channel \"{}\" in Guild \"{}\"", voice_channel_id, guild_id);
-                    log::info!("\"{}\" has become the Leader of Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id);
+                    log(LOG::INFO, format!("Creating a new Game Instance for Voice Channel \"{}\" in Guild \"{}\"", voice_channel_id, guild_id));
+                    log(LOG::INFO, format!("\"{}\" has become the Leader of Voice Channel \"{}\" in Guild \"{}\"", user_tag, voice_channel_id, guild_id));
                     let new_game = GameInstance{
                         leader_user_id: user_id,
                         recent_text_channel_id: msg.channel_id.0,
@@ -178,7 +178,7 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
             }
         },
         None => { 
-            if cmd_name != "help" {
+            if cmd_name != "help" && cmd_name != "prefix" {
                 msg.channel_id.say(&ctx.http, "Please enter Voice Chat before \
                     using Game commands.").await.unwrap();
                 
@@ -194,43 +194,38 @@ async fn before_hook(ctx: &Context, msg: &Message, cmd_name: &str) -> bool {
 async fn after_hook(ctx: &Context, msg: &Message, _: &str, error: Result<(), CommandError>) {
     if let Err(why) = error {
         msg.channel_id.say(&ctx.http, format!("```Error: {}```", why)).await.unwrap();
-        log::warn!("Command \"{}\" sent by \"{}\" in \"{}\" failed with error \"{}\"", msg.content, msg.author.tag(), msg.guild_id.unwrap(), why);
+        log(LOG::WARN, format!("Command \"{}\" sent by \"{}\" in \"{}\" failed with error \"{}\"", msg.content, msg.author.tag(), msg.guild_id.unwrap(), why));
     }
 }
 
 #[hook]
-async fn unrecognised_command_hook(ctx: &Context, msg: &Message, _: &str) {
-    msg.channel_id.say(&ctx.http, "```Error: Unknown command. Use '!help' for more information.```").await.unwrap();
-    log::warn!("Command \"{}\" sent by \"{}\" in \"{}\" failed with error \"{}\"", msg.content, msg.author.tag(), msg.guild_id.unwrap(), "Unknown command. Use '!help' for more information.");
+async fn dynamic_prefix(ctx: &Context, msg: &Message) -> Option<String> {
+    let data = ctx.data.read().await;
+    let prefixes = data.get::<PrefixMap>().unwrap();
+    let default_prefix = String::from("!");
+
+    let guild_id = msg.guild_id.unwrap();
+
+    match prefixes.get(&guild_id) {
+        Some(prefix) => Some(prefix.to_owned()),
+        None => Some(default_prefix)
+    }
 }
 
 #[group]
-#[commands(help, play, discuss, kill, revive, reset)]
+#[commands(help, prefix, play, discuss, kill, revive, reset)]
 struct General;
 
 #[tokio::main]
 async fn main() {
-    Builder::new()
-        .format(|buf, record| {
-            writeln!(buf,
-                "{} [{}] - {}",
-                Local::now().format("%Y-%m-%dT%H:%M:%S"),
-                record.level(),
-                record.args()
-            )
-        })
-        .filter(None, LevelFilter::Info)
-        .init();
-    
     panic::set_hook(Box::new(|panic_info| {
-        log::error!("{}", panic_info);
+        log(LOG::ERROR, format!("{}", panic_info));
     }));
     
     let framework = StandardFramework::new()
         .before(before_hook)
         .after(after_hook)
-        .unrecognised_command(unrecognised_command_hook)
-        .configure(|c| c.prefix("!"))
+        .configure(|c| c.dynamic_prefix(dynamic_prefix))
         .group(&GENERAL_GROUP);
 
     let mut client = Client::new(config::TOKEN)
@@ -242,12 +237,53 @@ async fn main() {
     {
         let mut data = client.data.write().await;
         data.insert::<Games>(HashMap::new());
+        data.insert::<PrefixMap>(HashMap::new());
     }
 
     // start listening for events by starting a single shard
     if let Err(why) = client.start().await {
         println!("An error occurred while running the client: {:?}", why);
     }
+}
+
+#[command]
+async fn prefix(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let mut data = ctx.data.write().await;
+
+    let prefixes = data.get_mut::<PrefixMap>().unwrap();
+    let default_prefix = String::from("!");
+    let guild_id = msg.guild_id.unwrap();
+    let guild_name = msg.guild(&ctx.cache).await.unwrap().name;
+
+    if args.is_empty() {
+        let cur_prefix = match prefixes.get(&guild_id) {
+            Some(prefix) => prefix.to_owned(),
+            None => default_prefix
+        };
+
+        msg.channel_id.say(ctx, format!("My prefix for `{}` is `{}`", guild_name, cur_prefix)).await?;
+        return Ok(())
+    }
+
+    let member = msg.member(&ctx.http).await.unwrap();
+    let member_perms = member.permissions(&ctx.cache).await.unwrap();
+    let administrator_perm = member_perms.administrator();
+
+    if !administrator_perm {
+        return Err("The Administrator permission is needed to change my prefix.".into());
+    }
+
+    let new_prefix = args.single::<String>().unwrap();
+
+    if new_prefix == default_prefix {
+        prefixes.remove(&guild_id);
+    } else {
+        prefixes.insert(guild_id, new_prefix.to_owned());
+    }
+
+    msg.channel_id.say(ctx, format!("My new prefix is `{}` for `{}`!", new_prefix, guild_name)).await?;
+
+    Ok(())
 }
 
 #[command]
@@ -410,7 +446,7 @@ async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 async fn help(ctx: &Context, msg: &Message) -> CommandResult {
     msg.channel_id.say(&ctx.http, "⁣\n**Info**\n\
-        The AmongUsBot can only be used from within a Voice Channel. The first person \
+        I can only be used from within a Voice Channel. The first person \
         to type a command while within a Voice Channel, will create a Game Instance for \
         that Voice Channel and become the Leader of that Voice Channel's Game Instance. \
         The Leader controls all muting within the channel. To step down as Leader, the \
@@ -423,12 +459,33 @@ async fn help(ctx: &Context, msg: &Message) -> CommandResult {
         `!discuss` - Unmutes all Players in the Voice Chat *except* for those which are Killed\n\
         `!kill <@Player>` - Kills or Mutes the given Player regardless of Unmute\n\
         `!revive <@Player>` - Revives or Unmutes a Killed player\n\
-        `!reset` - Revives all Killed Players\n\n\
+        `!reset` - Revives all Killed Players\n\
+        `!prefix <prefix>` - Sets my prefix in your server\n\n\
         **Credit**\n\
-        Developed by nabakin.\n\nIf you like AmongUsBot, please star it on GitHub. If you \
-        want AmongUsBot in your server, an invite link can be found on GitHub as well. Thanks \
-        for using my bot! https://github.com/nabakin/among-us-discord-bot")
+        Developed by nabakin.\n\nIf you like me, please star on GitHub. If you \
+        want me in your server, an invite link can be found on GitHub as well. Thanks \
+        for using me! https://github.com/nabakin/among-us-discord-bot")
         .await?;
 
     Ok(())
+}
+
+enum LOG {
+    INFO,
+    WARN,
+    ERROR
+}
+
+fn log(level: LOG, message: String) {
+    let level = match level {
+        LOG::INFO => "INFO",
+        LOG::WARN => "WARN",
+        LOG::ERROR => "ERROR"
+    };
+
+    println!("{} [{}] - {}",
+        Local::now().format("%Y-%m-%dT%H:%M:%S"),
+        level,
+        message
+    );
 }

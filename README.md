@@ -12,6 +12,7 @@ Hands-free Discord bot to help people in your Discord server play Among Us. Your
 - Asynchronous and built in Rust for the best performance.
 - Only requires two permissions to operate.
 - Basic error handling and logging
+- Guild-specific prefixes
 
 ## My Bot Invite
 
