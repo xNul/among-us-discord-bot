@@ -421,24 +421,22 @@ async fn reset(ctx: &Context, msg: &Message) -> CommandResult {
     let voice_states = guild.voice_states;
     let voice_state = voice_states.get(&msg.author.id).unwrap();
     let voice_channel_id = voice_state.channel_id.unwrap();
+    let voice_channel = guild.channels.get(&voice_channel_id).unwrap();
+    let voice_channel_members = voice_channel.members(&ctx.cache).await?;
 
     let mut data = ctx.data.write().await;
     let games = data.get_mut::<Games>().unwrap();
     let game_instance = games.get_mut(&voice_channel_id.0).unwrap();
-    let dead_players = &game_instance.dead_players;
-
-    if game_instance.global_unmute {
-        let guild = msg.guild(&ctx.cache).await.unwrap();
-
-        for &user_id in dead_players.keys() {
-            let member = guild.member(&ctx.http, user_id).await?;
-            member.edit(&ctx.http, |em| em.mute(false)).await?;
-        }
-    }
 
     game_instance.dead_players = HashMap::new();
 
-    msg.channel_id.say(&ctx.http, "Those Killed have been Revived.").await?;
+    for member in voice_channel_members.iter() {
+        member.edit(&ctx.http, |em| em.mute(false)).await?;
+    }
+
+    game_instance.global_unmute = true;
+
+    msg.channel_id.say(&ctx.http, "The Game Instance has been Reset.").await?;
 
     Ok(())
 }
@@ -459,7 +457,7 @@ async fn help(ctx: &Context, msg: &Message) -> CommandResult {
         `!discuss` - Unmutes all Players in the Voice Chat *except* for those which are Killed\n\
         `!kill <@Player>` - Kills or Mutes the given Player regardless of Unmute\n\
         `!revive <@Player>` - Revives or Unmutes a Killed player\n\
-        `!reset` - Revives all Killed Players\n\
+        `!reset` - Resets the Game Instance\n\
         `!prefix <prefix>` - Sets my prefix in your server\n\n\
         **Credit**\n\
         Developed by nabakin.\n\nIf you like me, please star on GitHub. If you \
